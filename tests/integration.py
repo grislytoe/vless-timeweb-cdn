@@ -156,7 +156,7 @@ server {{
                     assert tls.version() == "TLSv1.3"
             try:
                 with socket.create_connection(("127.0.0.1", s["port"])) as raw:
-                        context.wrap_socket(raw, server_hostname="wrong.example.test")
+                    context.wrap_socket(raw, server_hostname="wrong.example.test")
             except ssl.SSLError:
                 pass
             else:
