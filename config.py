@@ -188,6 +188,9 @@ server {{
         access_log off;
         client_max_body_size 2m;
         proxy_pass http://127.0.0.1:{fallback};
+        # Xray excludes 127.0.0.1 from online tracking. Keep the backend local
+        # but use another loopback source for aggregate per-key activity.
+        proxy_bind 127.0.0.2;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header Connection "";

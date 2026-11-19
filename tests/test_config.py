@@ -77,6 +77,7 @@ class ConfigTests(unittest.TestCase):
         self.assertIn(c['path'] + '/', nginx)
         self.assertIn('proxy_request_buffering off', nginx)
         self.assertIn('proxy_buffering off', nginx)
+        self.assertIn('proxy_bind 127.0.0.2', nginx)
         self.assertNotIn('proxy_protocol', nginx)
 
     def test_origin_probe_does_not_use_cdn_sni(self):
