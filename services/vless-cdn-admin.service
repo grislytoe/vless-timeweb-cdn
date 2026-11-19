@@ -1,0 +1,33 @@
+[Unit]
+Description=VPN local key manager
+After=xray.service
+Wants=xray.service
+[Service]
+User=root
+Group=vless-cdn-admin
+SupplementaryGroups=xray
+ExecStart=/usr/bin/python3 /opt/vless-timeweb-cdn/admin.py serve
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=vless-cdn-admin vless-timeweb-cdn-lock
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+ExecStartPre=/usr/bin/chmod 0700 /run/vless-timeweb-cdn-lock
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/vless-timeweb-cdn /usr/local/etc/xray /etc/vless-cdn-panel
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=CAP_CHOWN
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+LimitCORE=0
+[Install]
+WantedBy=multi-user.target

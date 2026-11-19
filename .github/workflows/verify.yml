@@ -1,0 +1,73 @@
+name: Verify Timeweb CDN kit
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: '64'
+            sha256: b651f7e1d9966ee2c1b1ee1bf8b52c72771824d3065dce96bbc8bcc19ed95f82
+          - runner: ubuntu-24.04-arm
+            arch: arm64-v8a
+            sha256: 64ed6858982a7f5eb85d88b811089063bd4f17561f4c8f44e0f1dc8e6f6430be
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-flask python3-venv python3-qrcode python3-pil openssl shellcheck unzip
+          sudo bash runtime.sh
+      - name: Install Nginx using the actual installer package section
+        run: |
+          sudo env GITHUB_ACTIONS=true /usr/bin/python3 - <<'PY'
+          import os, pathlib, subprocess, tempfile
+          assert os.environ.get('GITHUB_ACTIONS') == 'true'
+          source = pathlib.Path('install.sh').read_text()
+          begin = source.index('if [[ "$ID:$VERSION_ID" == ubuntu:22.04 ]]; then')
+          end = source.index('if [[ -n "$XRAY_ARCHIVE" ]]; then')
+          with tempfile.TemporaryDirectory(prefix='nginx-package-test-') as tmp:
+              env = dict(os.environ, WORK=tmp, DEBIAN_FRONTEND='noninteractive')
+              subprocess.run(['bash', '-c', 'set -Eeuo pipefail\nsource /etc/os-release\n' + source[begin:end]], env=env, check=True)
+          PY
+      - name: Fetch and verify pinned official Xray
+        env:
+          XRAY_ARCH: ${{ matrix.arch }}
+          XRAY_SHA: ${{ matrix.sha256 }}
+        run: |
+          mkdir -p /tmp/xray-kit
+          curl -fL --retry 3 "https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-linux-$XRAY_ARCH.zip" -o /tmp/xray-kit/core.zip
+          printf '%s  /tmp/xray-kit/core.zip\n' "$XRAY_SHA" | sha256sum -c -
+          unzip -q /tmp/xray-kit/core.zip -d /tmp/xray-kit
+          chmod +x /tmp/xray-kit/xray
+      - name: Manifest, shell checks, application tests
+        env:
+          XRAY_TEST_BIN: /tmp/xray-kit/xray
+          BASH_TEST_BIN: /bin/bash
+        run: |
+          sha256sum --strict -c SHA256SUMS
+          bash -n install.sh
+          bash -n bootstrap.sh
+          bash -n runtime.sh
+          shellcheck -x install.sh bootstrap.sh inputs.sh runtime.sh
+          if [[ -f start.sh ]]; then
+            bash -n start.sh
+            shellcheck -x start.sh
+          fi
+          /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Real TLS, bidirectional traffic, UDP and revocation
+        run: /usr/bin/python3 tests/integration.py --xray /tmp/xray-kit/xray --nginx /usr/sbin/nginx --openssl /usr/bin/openssl
+      - name: Real systemd services and panel HTTPS
+        run: sudo env GITHUB_ACTIONS=true VLESS_SYSTEMD_SMOKE=1 XRAY_TEST_BIN=/tmp/xray-kit/xray /usr/bin/python3 tests/systemd_smoke.py
+      - name: Real Chromium native HTML form regression
+        if: matrix.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get install -y python3-venv
+          /usr/bin/python3 -m venv --system-site-packages /tmp/vless-browser
+          /tmp/vless-browser/bin/pip install playwright==1.56.0 zxing-cpp==2.3.0 numpy==1.26.4
+          /tmp/vless-browser/bin/python -m playwright install --with-deps chromium
+          /tmp/vless-browser/bin/python tests/browser_login.py

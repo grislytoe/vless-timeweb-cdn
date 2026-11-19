@@ -1,0 +1,33 @@
+[Unit]
+Description=VPN administration web panel
+After=vless-cdn-admin.service
+Wants=vless-cdn-admin.service
+[Service]
+User=vless-cdn-panel
+Group=www-data
+SupplementaryGroups=vless-cdn-admin
+WorkingDirectory=/opt/vless-timeweb-cdn
+ExecStart=/opt/vless-runtime/gunicorn-27.0.0/bin/gunicorn --workers 1 --threads 4 --timeout 120 --bind unix:/run/vless-cdn-panel/http.sock --umask 7 panel:create_app()
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=vless-cdn-panel
+RuntimeDirectoryMode=0750
+StateDirectory=vless-cdn-panel
+StateDirectoryMode=0700
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+LimitCORE=0
+[Install]
+WantedBy=multi-user.target
