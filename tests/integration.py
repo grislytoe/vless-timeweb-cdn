@@ -36,7 +36,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Length", str(len(PAYLOAD)))
         self.end_headers()
-        self.wfile.write(PAYLOAD)
+        if self.path == '/hold':
+            # Hold the server-side request open; curl rate limiting alone lets
+            # the complete response fit in socket buffers before online sampling.
+            for offset in range(0, len(PAYLOAD), 65536):
+                self.wfile.write(PAYLOAD[offset:offset + 65536])
+                self.wfile.flush()
+                time.sleep(0.1)
+        else:
+            self.wfile.write(PAYLOAD)
 
     def do_POST(self):
         SOURCES.append(self.client_address[0])
@@ -53,7 +61,7 @@ class Handler(BaseHTTPRequestHandler):
     def handle(self):
         try:
             super().handle()
-        except ConnectionResetError:
+        except (ConnectionResetError, BrokenPipeError):
             # Expected when revocation deliberately closes existing Xray streams.
             pass
 
@@ -228,7 +236,7 @@ server {{
             initial = store.read()[c['uuid']]
             assert initial['upload'] >= len(PAYLOAD) and initial['download'] >= 2 * len(PAYLOAD), initial
             assert other['uuid'] not in values, 'Traffic was attributed to an unused key'
-            held = start(stack, curl + ['--limit-rate', '64k', '--max-time', '4', url], log)
+            held = start(stack, curl + ['--max-time', '4', f'http://127.0.0.1:{http_port}/hold'], subprocess.DEVNULL)
             for _ in range(10):
                 time.sleep(0.1)
                 _, online_values = sample()
